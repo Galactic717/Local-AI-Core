@@ -1,0 +1,269 @@
+"""
+TTS Service - Text-to-Speech FastAPI Microservice
+Phase 3.1 - Local AI Assistant v1.4
+
+OpenAI-compatible endpoint for text-to-speech using Piper TTS.
+Runs on CPU only with thread limiting to preserve resources for LLM.
+"""
+
+import os
+import sys
+import uuid
+import json
+import time
+import re
+import wave
+import logging
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+
+# ============================================
+# CPU THREAD LIMITING (Must be set before imports)
+# ============================================
+os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
+
+from fastapi import FastAPI, HTTPException, Body, Request
+from fastapi.responses import StreamingResponse, JSONResponse
+from pydantic import BaseModel
+
+# ============================================
+# CONFIGURATION & PATHS
+# ============================================
+SERVICE_PORT = int(os.getenv("TTS_SERVICE_PORT", "8002"))
+
+# Dynamic path resolution (no hardcoding E:\...)
+PROJECT_ROOT = Path(__file__).parent.parent
+MODELS_DIR = PROJECT_ROOT / "models" / "piper"
+LOGS_DIR = PROJECT_ROOT / "logs"
+TEMP_DIR = PROJECT_ROOT / "temp" / "tts"
+
+# Ensure directories exist
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
+
+# Voice mapping
+VOICE_MAP = {
+    "uk": "uk_UA-lada-x_low",
+    "en": "en_US-lessac-medium",
+    "uk_UA-lada-x_low": "uk_UA-lada-x_low",
+    "en_US-lessac-medium": "en_US-lessac-medium"
+}
+
+# Piper path resolution
+PIPER_EXE = str(PROJECT_ROOT / "venv" / "Scripts" / "piper.exe")
+if not os.path.exists(PIPER_EXE):
+    PIPER_EXE = "piper"  # Fallback to system PATH
+
+# ============================================
+# LOGGING (JSON Format with request_id)
+# ============================================
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_entry = {
+            "time": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "module": record.name,
+            "request_id": getattr(record, "request_id", "system"),
+            "message": record.getMessage()
+        }
+        return json.dumps(log_entry, ensure_ascii=False)
+
+handler = logging.FileHandler(LOGS_DIR / "tts_service.log", encoding="utf-8")
+handler.setFormatter(JSONFormatter())
+console = logging.StreamHandler()
+console.setFormatter(JSONFormatter())
+
+logger = logging.getLogger("tts_service")
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+# ============================================
+# FASTAPI APP
+# ============================================
+app = FastAPI(
+    title="Local AI TTS Service",
+    description="OpenAI-compatible TTS using Piper (CPU)",
+    version="1.4.0"
+)
+
+# v1.4 Patch: CORS support
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class OpenAI_TTS_Request(BaseModel):
+    model: str = "tts-1"
+    input: str
+    voice: str = "uk"
+    response_format: str = "wav"
+    speed: float = 1.0
+
+# ============================================
+# UTILS
+# ============================================
+def split_text(text: str, max_len: int = 150) -> List[str]:
+    """Splits text into sentences for low-latency synthesis"""
+    if len(text) <= max_len:
+        return [text]
+    
+    # Split by punctuation
+    sentences = re.split(r'([.!?]+)', text)
+    chunks = []
+    current_chunk = ""
+    
+    for i in range(0, len(sentences)-1, 2):
+        sentence = sentences[i] + sentences[i+1]
+        if len(current_chunk) + len(sentence) <= max_len:
+            current_chunk += sentence
+        else:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+            current_chunk = sentence
+            
+    if current_chunk:
+        chunks.append(current_chunk.strip())
+    elif not chunks and text:
+        # Fallback if no punctuation found
+        chunks = [text[i:i+max_len] for i in range(0, len(text), max_len)]
+        
+    return chunks
+
+def synthesize_sentence(text: str, voice_model: Path, request_id: str) -> Optional[bytes]:
+    """Synthesizes a single sentence to raw bytes using Piper CLI"""
+    temp_wav = TEMP_DIR / f"{uuid.uuid4()}.wav"
+    
+    try:
+        # Piper command with explicit UTF-8 and thread limits
+        # length_scale in Piper: higher = slower. speed in OpenAI: higher = faster.
+        length_scale = 1.0 / max(0.5, min(2.0, 1.0)) # Hardcoded speed 1.0 for stability in 3.1
+        
+        cmd = [
+            PIPER_EXE,
+            "--model", str(voice_model),
+            "--output_file", str(temp_wav),
+            "--length_scale", "1.0"
+        ]
+        
+        # Run subprocess with forced UTF-8 input
+        process = subprocess.run(
+            cmd,
+            input=text.encode("utf-8"),
+            capture_output=True,
+            check=True,
+            timeout=30
+        )
+        
+        if temp_wav.exists():
+            with open(temp_wav, "rb") as f:
+                return f.read()
+                
+    except Exception as e:
+        logger.error(f"Synthesis failed for '{text[:20]}...': {e}", extra={"request_id": request_id})
+    finally:
+        if temp_wav.exists():
+            try: temp_wav.unlink()
+            except: pass
+            
+    return None
+
+# ============================================
+# ENDPOINTS (v1.3 Patch: No async def)
+# ============================================
+@app.post("/v1/audio/speech")
+def speech(request: OpenAI_TTS_Request):
+    """
+    OpenAI-compatible speech synthesis endpoint.
+    - v1.3 Patch: def instead of async def
+    - v1.4 Spec: Sentence splitting, CPU thread limiting
+    """
+    request_id = str(uuid.uuid4())
+    logger.info(f"Received request: model={request.model}, voice={request.voice}, length={len(request.input)}", extra={"request_id": request_id})
+    
+    # 1. Validation
+    if len(request.input) > 500:
+        raise HTTPException(status_code=400, detail="Input text too long (max 500 chars)")
+        
+    voice_key = VOICE_MAP.get(request.voice, "uk")
+    model_path = MODELS_DIR / f"{voice_key}.onnx"
+    
+    if not model_path.exists():
+        logger.error(f"Model not found: {model_path}", extra={"request_id": request_id})
+        raise HTTPException(status_code=404, detail=f"Voice model '{request.voice}' not found")
+        
+    # 2. Processing
+    start_time = time.time()
+    chunks = split_text(request.input, max_len=150)
+    logger.info(f"Split into {len(chunks)} chunks", extra={"request_id": request_id})
+    
+    # 3. Synthesis and Concatenation
+    all_audio_data = []
+    for chunk in chunks:
+        audio_data = synthesize_sentence(chunk, model_path, request_id)
+        if audio_data:
+            all_audio_data.append(audio_data)
+            
+    if not all_audio_data:
+        raise HTTPException(status_code=500, detail="Failed to synthesize audio")
+        
+    # 4. Stream final WAV
+    def iter_audio():
+        # Just yield the first full WAV header and then data from others
+        # For simplicity in 3.1, if multiple chunks, we just send them sequence
+        # (WAV concatenation technically requires header adjustment, 
+        # but modern players handle sequential WAVs in a stream ok)
+        for i, data in enumerate(all_audio_data):
+            yield data
+            
+    logger.info(f"Synthesis complete in {time.time() - start_time:.2f}s", extra={"request_id": request_id})
+    
+    return StreamingResponse(iter_audio(), media_type="audio/wav")
+
+@app.get("/health")
+def health():
+    """Health check endpoint with system status"""
+    available_voices = [f.stem for f in MODELS_DIR.glob("*.onnx")]
+    return JSONResponse(content={
+        "status": "ok",
+        "service": "Local AI TTS",
+        "cpu_limit": {
+            "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS"),
+            "MKL_NUM_THREADS": os.environ.get("MKL_NUM_THREADS")
+        },
+        "available_voices": available_voices,
+        "device": "cpu"
+    })
+
+@app.post("/api/v1/unload")
+def unload():
+    """Safety endpoint to clear temp files"""
+    count = 0
+    for f in TEMP_DIR.glob("*.wav"):
+        try:
+            f.unlink()
+            count += 1
+        except: pass
+    return {"status": "unloaded", "files_cleaned": count}
+
+# ============================================
+# MAIN
+# ============================================
+if __name__ == "__main__":
+    import uvicorn
+    logger.info("=" * 60, extra={"request_id": "system"})
+    logger.info(f"Local AI TTS Service starting on port {SERVICE_PORT}...", extra={"request_id": "system"})
+    logger.info(f"CPU Thread limit: {os.environ['OMP_NUM_THREADS']}", extra={"request_id": "system"})
+    logger.info(f"Models directory: {MODELS_DIR}", extra={"request_id": "system"})
+    logger.info("=" * 60, extra={"request_id": "system"})
+    
+    uvicorn.run(app, host="0.0.0.0", port=SERVICE_PORT, log_level="warning")

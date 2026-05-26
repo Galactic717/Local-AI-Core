@@ -1,0 +1,27 @@
+# ============================================
+# LOGGING CONFIGURATION
+# ============================================
+
+# Log level: DEBUG | INFO | WARNING | ERROR | CRITICAL
+level: INFO
+
+# Format: json | text
+# Use 'text' for readable console output, 'json' for log aggregation
+format: text
+
+# File rotation size
+rotation: 10MB
+
+# Maximum number of rotated files to keep
+max_backups: 5
+
+# Directory for log files (relative to project root)
+logs_dir: logs
+
+# Per-service log files
+services:
+  orchestrator: orchestrator.log
+  stt: stt_service.log
+  tts: tts_service.log
+  image_gen: image_gen_service.log
+  brain_router: router.log

@@ -1,0 +1,87 @@
+# ============================================
+# OLLAMA CONFIGURATION v1.6 (RTX 3060 6GB)
+# ============================================
+# Updated model stack: llama3.2, phi4-mini, aya-expanse, qwen2.5, deepseek-r1
+
+models:
+  # --- Llama 3.2 3B (Default / General Chat) ---
+  llama3.2:latest:
+    num_gpu_layers: 40          # Вся модель на GPU
+    num_ctx: 4096
+    num_thread: 8
+    num_batch: 256
+    keep_alive: "20s"
+    temperature: 0.7
+    top_p: 0.9
+    repeat_penalty: 1.1
+
+  # --- Aya Expanse 8B (Ukrainian / Multilingual) ---
+  aya-expanse:8b:
+    num_gpu_layers: 18          # Частина на GPU, решта RAM
+    num_ctx: 4096
+    num_thread: 8
+    num_batch: 256
+    keep_alive: "10s"
+    temperature: 0.7
+    top_p: 0.9
+    repeat_penalty: 1.1
+
+  # --- Qwen 2.5 7B (Math / Science) ---
+  qwen2.5:7b:
+    num_gpu_layers: 22          # Знижено для стабільності на 6GB VRAM
+    num_ctx: 4096               
+    num_thread: 8
+    num_batch: 256
+    keep_alive: "10s"
+    temperature: 0.7
+    top_p: 0.9
+    repeat_penalty: 1.1
+
+  # --- DeepSeek R1 8B (Reasoning) ---
+  deepseek-r1:8b:
+    num_gpu_layers: 18          # Тільки частина на GPU
+    num_ctx: 4096
+    num_thread: 8
+    num_batch: 256
+    keep_alive: "10s"
+    temperature: 0.7
+    top_p: 0.9
+    repeat_penalty: 1.1
+
+  # --- Phi-4 Mini (Fast Task / MCP / Tools) ---
+  phi4-mini:latest:
+    num_gpu_layers: 40          # Вся модель на GPU
+    num_ctx: 4096
+    num_thread: 8
+    num_batch: 256
+    keep_alive: "20s"
+    temperature: 0.7
+    top_p: 0.9
+    repeat_penalty: 1.1
+
+# --- Orchestrator Settings ---
+orchestrator:
+  vram_threshold_mb: 5200
+  vram_critical_mb: 5400
+  vram_warning_mb: 4800
+  cooldown_sec: 3
+  check_interval_sec: 5
+  verify_timeout_sec: 30
+  max_retries: 3
+  service_timeout_sec: 30
+  image_timeout_sec: 60
+
+# --- Unload Priority (lower = unload first) ---
+unload_priority:
+  image_gen: 1
+  tts: 2
+  stt: 3
+  llm: 4
+
+# --- Service URLs ---
+services:
+  ollama: "http://localhost:11434"
+  stt: "http://localhost:8001"
+  tts: "http://localhost:8002"
+  image_gen: "http://localhost:8003"
+  orchestrator: "http://localhost:8004"

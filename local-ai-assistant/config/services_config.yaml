@@ -1,0 +1,40 @@
+# ============================================
+# SERVICES CONFIGURATION
+# ============================================
+# Central service registry — URLs, ports, timeouts.
+# Used by Brain Router and other services that need
+# to discover each other.
+
+urls:
+  ollama: "http://localhost:11434"
+  stt: "http://localhost:8001"
+  tts: "http://localhost:8002"
+  image_gen: "http://localhost:8003"
+  orchestrator: "http://localhost:8004"
+  brain_router: "http://localhost:8000"
+
+ports:
+  ollama: 11434
+  stt: 8001
+  tts: 8002
+  image_gen: 8003
+  orchestrator: 8004
+  brain_router: 8000
+
+timeouts:
+  default_sec: 30
+  llm_sec: 60
+  image_sec: 60
+  health_check_sec: 5
+
+# Model requirements in MB (for orchestrator VRAM planning)
+model_requirements_mb:
+  "phi4-mini:latest": 2500
+  "phi4-mini": 2500
+  "qwen2.5:7b": 4200
+  "deepseek-r1:8b": 4600
+  "aya-expanse:8b": 5100
+  "aya-expanse": 5100
+  "llama3.2:latest": 2000
+  "llama3.2": 2000
+  "llama3.2:3b": 2000

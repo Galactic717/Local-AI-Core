@@ -1,0 +1,35 @@
+# ============================================
+# IMAGE GENERATION CONFIGURATION
+# ============================================
+# Phase 4 - Stable Diffusion Turbo
+
+model:
+  name: "stabilityai/sd-turbo"
+  variant: "fp16"               # fp16 | fp32
+  device: "cuda"
+  torch_dtype: "float16"
+  download_root: null
+
+# Expected VRAM: ~3000-3200 MB
+# Latency: ~2-4s для 512x512
+
+performance:
+  num_inference_steps: 1        # SD Turbo = 1 step
+  guidance_scale: 0.0           # SD Turbo не потребує CFG
+  width: 512
+  height: 512
+  enable_attention_slicing: true
+  enable_vae_slicing: true
+  enable_cpu_offload: false     # Тільки при критичній нестачі VRAM
+
+api:
+  port: 8003
+  host: "0.0.0.0"
+  max_prompt_length: 500
+  allowed_sizes: [[512, 512], [768, 512], [512, 768]]
+  output_format: "png"
+
+vram:
+  max_usage_mb: 3200
+  unload_immediately: true      # ЗАВЖДИ вивантажувати після генерації
+  force_cleanup: true           # Агресивний cleanup

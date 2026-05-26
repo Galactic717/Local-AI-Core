@@ -1,0 +1,177 @@
+"""
+VRAM Orchestrator - Central Coordinator for Model Management
+Phase 1.4.2 - Local AI Assistant
+"""
+
+import sys
+import os
+import time
+import threading
+import gc
+from enum import Enum
+from pathlib import Path
+
+import pynvml
+import requests
+import torch
+import yaml
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import uvicorn
+
+# Add project root to sys.path for internal imports
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.append(str(PROJECT_ROOT))
+
+from src.utils.logger import setup_logger
+
+# ==================== Configuration ====================
+CONFIG_DIR = PROJECT_ROOT / "config"
+LOGS_DIR = PROJECT_ROOT / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
+
+logger = setup_logger('orchestrator', LOGS_DIR / "orchestrator.log")
+
+# Load config safely
+try:
+    config_path = CONFIG_DIR / "ollama_config.yaml"
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+    else:
+        raise FileNotFoundError(f"Config not found at {config_path}")
+except Exception as e:
+    logger.error(f"Config load failed: {e}. Using defaults.")
+    config = {
+        'orchestrator': {'vram_threshold_mb': 5200, 'vram_critical_mb': 5800},
+        'services': {
+            'ollama': 'http://localhost:11434', 
+            'stt': 'http://localhost:8001', 
+            'tts': 'http://localhost:8002', 
+            'image_gen': 'http://localhost:8003'
+        }
+    }
+
+class ModelType(Enum):
+    LLM = "llm"
+    STT = "stt"
+    TTS = "tts"
+    IMAGE_GEN = "image_gen"
+
+class VRAMOrchestrator:
+    def __init__(self):
+        orch_config = config.get('orchestrator', {})
+        self.threshold_mb = orch_config.get('vram_threshold_mb', 5200)
+        self.critical_mb = orch_config.get('vram_critical_mb', 5800)
+        
+        self.services = config.get('services', {})
+        self.ollama_url = self.services.get('ollama', 'http://localhost:11434')
+        self.stt_url = self.services.get('stt', 'http://localhost:8001')
+        self.image_url = self.services.get('image_gen', 'http://localhost:8003')
+        
+        self.lock = threading.Lock()
+
+        try:
+            pynvml.nvmlInit()
+            self.gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        except Exception as e:
+            logger.error(f"NVML initialization failed: {e}")
+            self.gpu_handle = None
+
+    def get_vram_status(self):
+        if not self.gpu_handle:
+            return {"used_mb": 0, "total_mb": 0, "free_mb": 0, "status": "no_gpu"}
+        
+        info = pynvml.nvmlDeviceGetMemoryInfo(self.gpu_handle)
+        used = info.used // (1024**2)
+        total = info.total // (1024**2)
+        free = info.free // (1024**2)
+        
+        return {
+            "used_mb": used,
+            "total_mb": total,
+            "free_mb": free,
+            "percent": round((used / total) * 100, 2) if total > 0 else 0,
+            "threshold_mb": self.threshold_mb
+        }
+
+    def unload_ollama(self):
+        logger.info("Unloading Ollama models...")
+        try:
+            requests.post(f"{self.ollama_url}/api/generate", json={"model": "unload-all", "keep_alive": 0}, timeout=2)
+        except Exception: pass
+
+    def unload_stt(self):
+        logger.info("Unloading STT model...")
+        try:
+            requests.post(f"{self.stt_url}/api/v1/unload", timeout=2)
+        except Exception: pass
+
+    def unload_image_gen(self):
+        logger.info("Unloading Image Gen model...")
+        try:
+            requests.post(f"{self.image_url}/api/v1/unload", timeout=2)
+        except Exception: pass
+
+    def prepare_for(self, target: ModelType):
+        with self.lock:
+            status = self.get_vram_status()
+            logger.info(f"Preparing for {target.value}. Current VRAM: {status['used_mb']}MB used.")
+            
+            if target == ModelType.IMAGE_GEN:
+                self.unload_ollama()
+                self.unload_stt()
+            elif target == ModelType.LLM:
+                self.unload_image_gen()
+            elif target == ModelType.STT:
+                if status['used_mb'] > self.threshold_mb:
+                    self.unload_image_gen()
+            
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                gc.collect()
+            
+            time.sleep(1)
+            return self.get_vram_status()
+
+orchestrator = VRAMOrchestrator()
+app = FastAPI(title="VRAM Orchestrator", version="1.4.2")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/status")
+def get_status():
+    return orchestrator.get_vram_status()
+
+@app.post("/prepare/image")
+def prepare_image():
+    status = orchestrator.prepare_for(ModelType.IMAGE_GEN)
+    return {"status": "ready", "vram": status}
+
+@app.post("/prepare/llm")
+def prepare_llm():
+    status = orchestrator.prepare_for(ModelType.LLM)
+    return {"status": "ready", "vram": status}
+
+@app.post("/prepare/stt")
+def prepare_stt():
+    status = orchestrator.prepare_for(ModelType.STT)
+    return {"status": "ready", "vram": status}
+
+@app.post("/unload/all")
+def unload_all():
+    orchestrator.unload_ollama()
+    orchestrator.unload_stt()
+    orchestrator.unload_image_gen()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    return {"status": "all_unloaded"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8004)

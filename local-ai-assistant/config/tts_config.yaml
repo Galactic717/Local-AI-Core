@@ -1,0 +1,30 @@
+# ============================================
+# TTS (Text-to-Speech) CONFIGURATION
+# ============================================
+# Phase 3 - Piper TTS
+
+model:
+  name: "uk_UA-lada-x_low"      # Ukrainian voice
+  quality: "x_low"              # x_low | low | medium | high
+  device: "cpu"                 # CPU-only (VRAM економія)
+  download_root: null
+
+# Expected VRAM: ~50-100 MB (CPU mode)
+# Latency: ~1-2s для короткого тексту
+
+performance:
+  length_scale: 1.0             # Швидкість мови (0.5-2.0)
+  noise_scale: 0.667
+  noise_w: 0.8
+  sentence_silence: 0.2         # Пауза між реченнями (сек)
+
+api:
+  port: 8002
+  host: "0.0.0.0"
+  max_text_length: 5000         # Символів
+  output_format: "wav"          # wav | mp3
+  sample_rate: 22050
+
+vram:
+  max_usage_mb: 100
+  unload_after_sec: 120

@@ -1,0 +1,38 @@
+# ============================================
+# STT (Speech-to-Text) CONFIGURATION
+# ============================================
+# Phase 2 - Faster-Whisper
+
+model:
+  name: "base"                  # tiny | base | small | medium
+  device: "cuda"                # cuda | cpu
+  compute_type: "int8"          # int8 | float16 | float32
+  num_workers: 1
+  download_root: null           # null = default cache
+
+# Expected VRAM: ~300-400 MB
+# Latency: ~2-4s для 30s audio
+
+performance:
+  beam_size: 5
+  best_of: 5
+  patience: 1.0
+  length_penalty: 1.0
+  temperature: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+  compression_ratio_threshold: 2.4
+  log_prob_threshold: -1.0
+  no_speech_threshold: 0.6
+
+language:
+  default: "uk"                 # uk | en | ru | auto
+  task: "transcribe"            # transcribe | translate
+
+api:
+  port: 8001
+  host: "0.0.0.0"
+  max_audio_size_mb: 25
+  allowed_formats: ["wav", "mp3", "m4a", "ogg", "flac"]
+
+vram:
+  max_usage_mb: 400
+  unload_after_sec: 60          # Auto-unload після простою

@@ -1,0 +1,91 @@
+
+import os
+import requests
+import json
+import sys
+from pathlib import Path
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List, Optional
+
+# Add project root to sys.path
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.append(str(PROJECT_ROOT))
+
+from src.utils.logger import setup_logger
+
+logger = setup_logger("brain_router", PROJECT_ROOT / "logs" / "router.log")
+
+app = FastAPI(title="Codex Brain Router", version="1.0.0")
+
+ORCHESTRATOR_URL = "http://localhost:8004"
+OLLAMA_URL = "http://localhost:11434"
+
+class ChatRequest(BaseModel):
+    messages: List[dict]
+    stream: bool = False
+
+def detect_intent(last_message: str):
+    """
+    Визначає, яку модель краще використати.
+    Надалі тут буде виклик phi4-mini для AI-класифікації.
+    """
+    text = last_message.lower()
+    
+    if any(word in text for word in ["намалюй", "generate image", "draw", "photo", "зображення"]):
+        return "image_gen"
+    if any(word in text for word in ["рахуй", "math", "solve", "обчисли", "scientific"]):
+        return "falcon3:10b"
+    if any(word in text for word in ["mcp", "інструмент", "tool", "obsidian", "файл", "пошук"]):
+        return "granite:8b"
+    if any(word in text for word in ["подумай", "think", "чому", "why", "reason"]):
+        return "deepseek-r1:8b"
+    
+    return "qwen3.5:9b" # Default smart brain
+
+@app.post("/api/v1/chat")
+async def chat_router(request: ChatRequest):
+    last_msg = request.messages[-1]["content"]
+    intent = detect_intent(last_msg)
+    
+    logger.info(f"Detected intent: {intent} for message: {last_msg[:50]}...")
+
+    if intent == "image_gen":
+        # Спеціальна логіка для Image Gen
+        logger.info("Routing to Image Generation")
+        resp = requests.post("http://localhost:8003/api/v1/generate", json={"prompt": last_msg})
+        if resp.status_code == 200:
+            return {"role": "assistant", "content": "Ось ваше зображення!", "image_b64": resp.json().get("image")}
+        throw_error(f"Image gen failed: {resp.text}")
+
+    # Підготовка VRAM через Оркестратор
+    model_type = "llm" 
+    if "falcon" in intent or "qwen" in intent: model_type = "llm"
+    
+    try:
+        # Повідомляємо оркестратор, що нам потрібен LLM
+        # Він вивантажить Image Gen якщо треба
+        requests.post(f"{ORCHESTRATOR_URL}/prepare/llm")
+        
+        # Формуємо запит до Ollama
+        ollama_payload = {
+            "model": intent,
+            "messages": request.messages,
+            "stream": request.stream,
+            "options": {"num_ctx": 4096}
+        }
+        
+        # Якщо модель 10B, обмежуємо шари ще сильніше динамічно
+        if "falcon" in intent:
+            ollama_payload["options"]["num_gpu"] = 15
+        
+        response = requests.post(f"{OLLAMA_URL}/api/chat", json=ollama_payload)
+        return response.json()
+
+    except Exception as e:
+        logger.error(f"Router error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

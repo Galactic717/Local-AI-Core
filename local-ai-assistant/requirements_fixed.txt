@@ -1,0 +1,106 @@
+# ============================================
+# LOCAL AI ASSISTANT - Fixed Dependencies
+# Date: 2026-05-01
+# Status: TESTED AND WORKING
+# ============================================
+# Python 3.11.9 required
+
+# --- Core Framework ---
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+pydantic==2.9.0
+pydantic-settings==2.5.0
+
+# --- Configuration & Environment ---
+python-dotenv==1.0.1
+pyyaml==6.0.2
+
+# --- System Monitoring ---
+psutil==6.0.0
+nvidia-ml-py==12.560.30
+
+# --- HTTP Client ---
+requests==2.32.3
+httpx==0.27.0
+
+# --- Retry Logic ---
+tenacity==9.0.0
+
+# --- Async Support ---
+aiofiles==24.1.0
+
+# --- PyTorch Stack (CUDA 12.1) ---
+# CRITICAL: These versions are tested and working together
+torch==2.4.0
+torchvision==0.19.0
+torchaudio==2.4.0
+
+# --- AI/ML Libraries ---
+# CRITICAL: Version pinning required for compatibility
+numpy==1.26.4              # ⚠️ DO NOT upgrade to 2.x (PyTorch incompatible)
+diffusers==0.30.3          # ⚠️ DO NOT upgrade to 0.37.x (type inference errors)
+transformers==4.44.0       # ⚠️ DO NOT upgrade to 5.x (missing FLAX_WEIGHTS_NAME)
+tokenizers==0.19.1         # ⚠️ Must be <0.20 for transformers 4.44.0
+huggingface-hub==0.36.2    # Downgraded for tokenizers compatibility
+
+# --- STT (Speech-to-Text) ---
+faster-whisper==1.0.3
+ctranslate2==4.4.0
+
+# --- TTS (Text-to-Speech) ---
+piper-tts==1.2.0
+onnxruntime==1.19.2
+
+# --- Image Generation ---
+accelerate==0.34.2
+safetensors==0.4.5
+xformers==0.0.27.post2     # Optional but recommended (+20-30% speed)
+
+# --- Utilities ---
+python-multipart==0.0.9
+soundfile==0.12.1
+Pillow==10.4.0
+
+# ============================================
+# INSTALLATION NOTES:
+# ============================================
+# 1. Create venv:
+#    python -m venv venv
+#
+# 2. Activate venv:
+#    venv\Scripts\activate (Windows)
+#
+# 3. Install PyTorch with CUDA 12.1:
+#    pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu121
+#
+# 4. Install remaining dependencies:
+#    pip install -r requirements_fixed.txt
+#
+# 5. Verify installation:
+#    python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
+#
+# ============================================
+# CRITICAL WARNINGS:
+# ============================================
+# ⚠️ DO NOT run "pip install --upgrade" on these packages:
+#    - numpy (must stay 1.26.x)
+#    - diffusers (must stay 0.30.x)
+#    - transformers (must stay 4.44.x)
+#    - tokenizers (must stay 0.19.x)
+#
+# ⚠️ If you encounter dependency conflicts:
+#    1. Delete venv folder
+#    2. Recreate venv from scratch
+#    3. Follow installation steps above
+#
+# ============================================
+# TESTED CONFIGURATION:
+# ============================================
+# OS: Windows 11 Home 10.0.26200
+# Python: 3.11.9
+# CUDA: 12.1
+# GPU: NVIDIA GeForce RTX 3060 Laptop (6GB VRAM)
+# RAM: 16GB
+# Date Tested: 2026-05-01
+# Status: ✅ ALL SERVICES OPERATIONAL
+# ============================================

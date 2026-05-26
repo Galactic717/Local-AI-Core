@@ -1,0 +1,110 @@
+"""
+Image Generation Service - Stable Diffusion Turbo FastAPI Microservice
+Phase 4.1 - Local AI Assistant v1.4
+"""
+
+import os
+import uuid
+import time
+import base64
+import logging
+from io import BytesIO
+from pathlib import Path
+from typing import Optional
+
+import torch
+import requests
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from diffusers import AutoPipelineForText2Image
+
+import sys
+from pathlib import Path
+
+# Add project root to sys.path
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.append(str(PROJECT_ROOT))
+
+from src.utils.logger import setup_logger
+
+# Configuration
+SERVICE_PORT = int(os.getenv("IMAGE_SERVICE_PORT", "8003"))
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://localhost:8004")
+# Use exact local snapshot path
+MODEL_ID = r"E:\projects\AI\local-ai-assistant\models\sd_turbo\models--stabilityai--sd-turbo\snapshots\b261bac6fd2cf515557d5d0707481eafa0485ec2"
+
+PROJECT_ROOT = Path(__file__).parent.parent
+LOGS_DIR = PROJECT_ROOT / "logs"
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+logger = setup_logger("image_gen", LOGS_DIR / "image_gen_service.log")
+
+app = FastAPI(title="Image Gen Service", version="1.4.0")
+
+# CORS Patch
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class GenerateRequest(BaseModel):
+    prompt: str
+    width: int = 512
+    height: int = 512
+    steps: int = 2
+    seed: Optional[int] = None
+
+pipe = None
+
+def unload_pipeline():
+    global pipe
+    pipe = None
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+def get_pipeline():
+    global pipe
+    if pipe is None:
+        pipe = AutoPipelineForText2Image.from_pretrained(
+            MODEL_ID, torch_dtype=torch.float16, variant="fp16", local_files_only=True
+        )
+        pipe.to("cuda")
+        pipe.enable_vae_slicing()
+    return pipe
+
+@app.post("/api/v1/generate")
+def generate(request: GenerateRequest):
+    request_id = str(uuid.uuid4())
+    try:
+        # Request VRAM
+        requests.post(f"{ORCHESTRATOR_URL}/prepare/image", timeout=10)
+        
+        p = get_pipeline()
+        image = p(prompt=request.prompt, num_inference_steps=request.steps, guidance_scale=0.0).images[0]
+        
+        buffered = BytesIO()
+        image.save(buffered, format="PNG")
+        return {"image": base64.b64encode(buffered.getvalue()).decode()}
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        unload_pipeline()
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.post("/api/v1/unload")
+def unload():
+    unload_pipeline()
+    return {"status": "unloaded"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=SERVICE_PORT)
