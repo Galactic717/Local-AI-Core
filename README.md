@@ -66,51 +66,37 @@ graph TD
 
 ---
 
-## 🛠️ Setup & Restoration (Zero to Hero)
+## 🛠️ Setup & Restoration (One-Click)
 
-Because AI models and virtual environments are large, they are excluded from this repository. Follow these steps to fully restore the project on a new machine.
+Because AI models and virtual environments are large, they are excluded from this repository. We've automated the entire setup process.
 
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- [Ollama](https://ollama.ai/) (installed and running)
-- NVIDIA GPU (RTX 3060 6GB+ highly recommended)
-
-### 1. Clone & Initialize
+### 1. Clone
 ```bash
 git clone https://github.com/Galactic717/local-ai-assistant.git
 cd local-ai-assistant
 ```
 
-### 2. Restore Intelligence (Models)
-The orchestrator relies on specific LLMs. Run the restoration script to pull them via Ollama:
+### 2. Automatic Install
+Run the installer to setup Python venv, install dependencies (pip & npm), and pull AI models:
 ```bash
-# Windows
-.\scripts\restore_models.bat
-```
-*(This will download Qwen2.5, Phi-4-mini, and DeepSeek-R1).*
-*Note: STT and Image Generation models are downloaded automatically by HuggingFace upon their first run.*
-
-### 3. Setup Backend (Core)
-```bash
-cd local-ai-assistant
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env  # Edit .env with your specific paths/ports
+# Windows (Double-click or run in terminal)
+.\INSTALL.bat
 ```
 
-### 4. Setup Frontend (UI)
+### 3. Launch
+Once the installer finishes, launch the entire ecosystem:
 ```bash
-cd ../local-ai-ui
-npm install
+.\LAUNCH_CODEX.bat
 ```
 
-### 5. Launch
-Return to the root directory and use the "One-Click" script:
-```bash
-./LAUNCH_CODEX.bat
-```
+---
+
+## 🏗️ Manual Setup (Advanced)
+If you prefer to setup components individually:
+1. **Models:** Run `.\scripts\restore_models.bat` to pull Ollama models.
+2. **Backend:** In `local-ai-assistant/`, run `python -m venv venv`, activate it, and `pip install -r requirements.txt`.
+3. **Frontend:** In `local-ai-ui/`, run `npm install`.
+
 
 ---
 
