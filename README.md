@@ -66,19 +66,51 @@ graph TD
 
 ---
 
-## 🛠️ Development
+## 🛠️ Setup & Restoration (Zero to Hero)
+
+Because AI models and virtual environments are large, they are excluded from this repository. Follow these steps to fully restore the project on a new machine.
 
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
-- Ollama (installed and running)
-- NVIDIA GPU (recommended for acceleration)
+- [Ollama](https://ollama.ai/) (installed and running)
+- NVIDIA GPU (RTX 3060 6GB+ highly recommended)
 
-### Manual Setup
-1. **Core:** Navigate to `local-ai-assistant/`, create venv, and `pip install -r requirements.txt`.
-2. **UI:** Navigate to `local-ai-ui/`, run `npm install`.
+### 1. Clone & Initialize
+```bash
+git clone https://github.com/Galactic717/local-ai-assistant.git
+cd local-ai-assistant
+```
 
-For detailed instructions, see the READMEs in each sub-folder.
+### 2. Restore Intelligence (Models)
+The orchestrator relies on specific LLMs. Run the restoration script to pull them via Ollama:
+```bash
+# Windows
+.\scripts\restore_models.bat
+```
+*(This will download Qwen2.5, Phi-4-mini, and DeepSeek-R1).*
+*Note: STT and Image Generation models are downloaded automatically by HuggingFace upon their first run.*
+
+### 3. Setup Backend (Core)
+```bash
+cd local-ai-assistant
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env  # Edit .env with your specific paths/ports
+```
+
+### 4. Setup Frontend (UI)
+```bash
+cd ../local-ai-ui
+npm install
+```
+
+### 5. Launch
+Return to the root directory and use the "One-Click" script:
+```bash
+./LAUNCH_CODEX.bat
+```
 
 ---
 
