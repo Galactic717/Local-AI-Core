@@ -29,7 +29,7 @@ class BrainRouter:
                 "languages": ["en", "uk", "ru", "zh"],
                 "speed": "medium",
                 "quality": "high",
-                "description": "Найрозумніша універсальна. Найкращий баланс логіки, знань та швидкості."
+                "description": "Smartest general-purpose model. Best balance of logic, knowledge, and speed."
             },
             "falcon3:10b": {
                 "size_gb": 6.3,
@@ -37,7 +37,7 @@ class BrainRouter:
                 "languages": ["en"],
                 "speed": "medium",
                 "quality": "high",
-                "description": "Наука та математика. Найпотужніша у своєму класі для складних обчислень."
+                "description": "Science and mathematics specialist. Powerful for complex calculations."
             },
             "granite3-dense:8b": {
                 "size_gb": 4.9,
@@ -45,7 +45,7 @@ class BrainRouter:
                 "languages": ["en"],
                 "speed": "fast",
                 "quality": "high",
-                "description": "Агентські функції. Ідеально працює з інструментами (Tool-calling) та MCP."
+                "description": "Agentic functions. Ideal for Tool-calling and MCP integration."
             },
             "deepseek-r1:8b": {
                 "size_gb": 5.2,
@@ -53,7 +53,7 @@ class BrainRouter:
                 "languages": ["en", "zh"],
                 "speed": "slow",
                 "quality": "very_high",
-                "description": "Reasoning (CoT). Найкраща для складного покрокового планування."
+                "description": "Reasoning (CoT). Best for complex step-by-step planning."
             },
             "aya-expanse:8b": {
                 "size_gb": 5.1,
@@ -61,7 +61,7 @@ class BrainRouter:
                 "languages": ["en", "uk", "pl", "ru", "ar", "hi", "zh", "es", "fr", "de"],
                 "speed": "medium",
                 "quality": "high",
-                "description": "Мультимовність. Якщо потрібна ідеальна українська/польська/інші."
+                "description": "Multilingual expert. Perfect for Ukrainian, Polish, and 20+ other languages."
             },
             "llama3.2:latest": {
                 "size_gb": 2.0,
@@ -69,7 +69,7 @@ class BrainRouter:
                 "languages": ["en"],
                 "speed": "very_fast",
                 "quality": "medium",
-                "description": "Швидкі відповіді. Найменша та найшвидша модель."
+                "description": "Quick responses. Smallest and fastest model for simple tasks."
             },
             "qwen2.5-coder:32b": {
                 "size_gb": 19.9,
@@ -77,7 +77,7 @@ class BrainRouter:
                 "languages": ["en", "zh"],
                 "speed": "slow",
                 "quality": "very_high",
-                "description": "Coding спеціаліст. Найкраща для програмування."
+                "description": "Coding specialist. State-of-the-art for programming and debugging."
             }
         }
 
@@ -192,35 +192,35 @@ class BrainRouter:
             # Language match (high priority)
             if language in model_info["languages"]:
                 score += 30
-                reasons.append(f"Підтримує {language}")
+                reasons.append(f"Supports {language}")
 
             # Query type match
             if query_type == QueryType.CODING and "coding" in model_info["strengths"]:
                 score += 40
-                reasons.append("Спеціалізація на coding")
+                reasons.append("Coding specialization")
             elif query_type == QueryType.MATH and "math" in model_info["strengths"]:
                 score += 40
-                reasons.append("Спеціалізація на математиці")
+                reasons.append("Math specialization")
             elif query_type == QueryType.REASONING and "reasoning" in model_info["strengths"]:
                 score += 35
-                reasons.append("Сильний reasoning")
+                reasons.append("Strong reasoning capabilities")
             elif query_type == QueryType.MULTILINGUAL and "multilingual" in model_info["strengths"]:
                 score += 40
-                reasons.append("Мультимовна модель")
+                reasons.append("Multilingual model")
             elif query_type == QueryType.SIMPLE and model_info["speed"] == "very_fast":
                 score += 30
-                reasons.append("Швидка відповідь")
+                reasons.append("High speed for simple query")
             elif query_type == QueryType.GENERAL and "general" in model_info["strengths"]:
                 score += 25
-                reasons.append("Універсальна модель")
+                reasons.append("General purpose model")
 
             # Complexity match
             if complexity == "simple" and model_info["speed"] in ["fast", "very_fast"]:
                 score += 15
-                reasons.append("Швидка для простих запитів")
+                reasons.append("Fast for simple requests")
             elif complexity == "complex" and model_info["quality"] in ["high", "very_high"]:
                 score += 20
-                reasons.append("Висока якість для складних запитів")
+                reasons.append("High quality for complex requests")
 
             # Quality bonus
             if model_info["quality"] == "very_high":
@@ -247,7 +247,7 @@ class BrainRouter:
             return {
                 "model": "llama3.2:latest",
                 "score": 0,
-                "reasons": ["Fallback: найменша модель"],
+                "reasons": ["Fallback: smallest available model"],
                 "query_analysis": {
                     "language": language,
                     "type": query_type.value,
