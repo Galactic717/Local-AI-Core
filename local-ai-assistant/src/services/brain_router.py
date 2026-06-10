@@ -27,7 +27,7 @@ app = FastAPI(title="Codex Brain Router", version="1.7.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000", "http://127.0.0.1:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -240,8 +240,10 @@ def generate_image_response(prompt_text: str) -> dict:
     }
 
 
+import asyncio
+
 @app.post("/api/v1/chat")
-def chat_router(request: ChatRequest):
+async def chat_router(request: ChatRequest):
     if not request.messages:
         raise HTTPException(status_code=400, detail="messages must not be empty")
 
@@ -253,9 +255,8 @@ def chat_router(request: ChatRequest):
 
     if intent == "image_gen":
         try:
-            return generate_image_response(last_msg_content)
-        except requests.exceptions.Timeout as exc:
-            raise HTTPException(
+            return await asyncio.to_thread(generate_image_response, last_msg_content)
+        except requests.exceptions.Timeout as exc:            raise HTTPException(
                 status_code=504,
                 detail="Image generation service timed out (60s)",
             ) from exc
@@ -300,7 +301,7 @@ def chat_router(request: ChatRequest):
 
 
 @app.post("/api/v2/agent/chat")
-def agent_chat(request: AgentChatRequest):
+async def agent_chat(request: AgentChatRequest):
     if not request.messages:
         raise HTTPException(status_code=400, detail="messages must not be empty")
 
@@ -312,7 +313,7 @@ def agent_chat(request: AgentChatRequest):
 
     if intent == "image_gen":
         try:
-            return generate_image_response(last_msg_content)
+            return await asyncio.to_thread(generate_image_response, last_msg_content)
         except requests.exceptions.Timeout as exc:
             raise HTTPException(
                 status_code=504,
@@ -327,30 +328,33 @@ def agent_chat(request: AgentChatRequest):
     if intent == MODEL_VISION:
         try:
             required_mb = MODEL_REQUIREMENTS_MB.get(intent, 5600)
-            requests.post(
-                f"{ORCHESTRATOR_URL}/prepare/llm",
-                json={"model_name": intent, "required_mb": required_mb},
-                timeout=ROUTER_TIMEOUT_SEC,
-            ).raise_for_status()
+            def _prepare_and_call():
+                requests.post(
+                    f"{ORCHESTRATOR_URL}/prepare/llm",
+                    json={"model_name": intent, "required_mb": required_mb},
+                    timeout=ROUTER_TIMEOUT_SEC,
+                ).raise_for_status()
 
-            # Force the vision model to respond in Ukrainian
-            vision_messages = [dict(m) for m in request.messages]
-            if vision_messages:
-                last_msg = dict(vision_messages[-1])
-                last_msg["content"] = str(last_msg.get("content", "")) + "\n\nIMPORTANT INSTRUCTION: You are an expert AI assistant. You MUST provide your entire analysis and response exclusively in the Ukrainian language (Українською мовою). Do not answer in English."
-                vision_messages[-1] = last_msg
+                # Force the vision model to respond in Ukrainian
+                vision_messages = [dict(m) for m in request.messages]
+                if vision_messages:
+                    last_msg = dict(vision_messages[-1])
+                    last_msg["content"] = str(last_msg.get("content", "")) + "\n\nIMPORTANT INSTRUCTION: You are an expert AI assistant. You MUST provide your entire analysis and response exclusively in the Ukrainian language (Українською мовою). Do not answer in English."
+                    vision_messages[-1] = last_msg
 
-            response = requests.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={
-                    "model": intent,
-                    "messages": vision_messages,
-                    "stream": request.stream,
-                },
-                timeout=GENERATION_TIMEOUT_SEC,
-            )
-            response.raise_for_status()
-            return response.json()
+                response = requests.post(
+                    f"{OLLAMA_URL}/api/chat",
+                    json={
+                        "model": intent,
+                        "messages": vision_messages,
+                        "stream": request.stream,
+                    },
+                    timeout=GENERATION_TIMEOUT_SEC,
+                )
+                response.raise_for_status()
+                return response.json()
+            
+            return await asyncio.to_thread(_prepare_and_call)
         except Exception as exc:
             logger.error("Vision request failed: %s", exc)
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -358,7 +362,7 @@ def agent_chat(request: AgentChatRequest):
     selected_model = intent if intent in MODEL_REQUIREMENTS_MB else MODEL_DEFAULT
 
     try:
-        agent_result = run_agent_session(request.messages, model_name=selected_model)
+        agent_result = await asyncio.to_thread(run_agent_session, request.messages, selected_model)
         return {
             "model": agent_result.model,
             "choices": [

@@ -20,6 +20,7 @@ import requests
 from src.utils.config_loader import get_service_url, load_services_config
 from src.utils.logger import setup_logger
 from src.utils.runtime_paths import bundled_path, ensure_writable_dir
+from src.services.obsidian_service import ObsidianService
 
 LOGS_DIR = ensure_writable_dir("logs")
 DATA_DIR = ensure_writable_dir("data")
@@ -130,6 +131,10 @@ class LocalAgentToolbox:
         self.workspace_roots = [root.resolve() for root in roots]
         self.primary_root = self.workspace_roots[0]
         self.memory_file = MEMORY_FILE
+        # Initialize Obsidian Service
+        default_obsidian = str(Path.home() / "Obsidian" / "LLM AI")
+        obsidian_path = os.getenv("OBSIDIAN_VAULT_PATH", default_obsidian)
+        self.obsidian = ObsidianService(obsidian_path)
 
     def tool_specs(self) -> List[Dict[str, Any]]:
         return [
@@ -199,6 +204,21 @@ class LocalAgentToolbox:
                 "description": "Save a durable note to local memory.",
                 "args": {"note": "string"},
             },
+            {
+                "name": "obsidian_search",
+                "description": "Search for notes in the Obsidian Vault.",
+                "args": {"query": "string", "limit": "int"},
+            },
+            {
+                "name": "obsidian_read",
+                "description": "Read the full content of an Obsidian note.",
+                "args": {"note_title": "string"},
+            },
+            {
+                "name": "obsidian_write",
+                "description": "Create or append to an Obsidian note.",
+                "args": {"title": "string", "content": "string", "append": "bool"},
+            },
         ]
 
     def available_tool_names(self) -> List[str]:
@@ -242,7 +262,28 @@ class LocalAgentToolbox:
             return "Read local memory"
         if tool_name == "remember_note":
             return "Saved note to local memory"
+        if tool_name == "obsidian_search":
+            return f"Found {len(payload.get('results', []))} Obsidian notes"
+        if tool_name == "obsidian_read":
+            return f"Read Obsidian note: {payload.get('found')}"
+        if tool_name == "obsidian_write":
+            return f"Obsidian note update status: {payload.get('status')}"
         return f"Completed {tool_name}"
+
+    def obsidian_search(self, query: str, limit: int = 5) -> Dict[str, Any]:
+        return {"results": self.obsidian.search_notes(query, limit)}
+
+    def obsidian_read(self, note_title: str) -> Dict[str, Any]:
+        content = self.obsidian.read_note(note_title)
+        return {"content": content, "found": content is not None}
+
+    def obsidian_write(self, title: str, content: str, append: bool = False) -> Dict[str, Any]:
+        if append:
+            success = self.obsidian.append_to_note(title, content)
+            return {"status": "appended" if success else "note_not_found"}
+        else:
+            path = self.obsidian.create_note(title, content)
+            return {"status": "created", "path": path}
 
     def list_roots(self) -> Dict[str, Any]:
         return {"roots": [str(root) for root in self.workspace_roots]}

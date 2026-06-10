@@ -42,3 +42,11 @@ models/*.safetensors
 # Data
 data/cache/
 data/temp/
+
+# Heavy models
+models/
+*.onnx
+*.safetensors
+*.bin
+venv/
+__pycache__/
