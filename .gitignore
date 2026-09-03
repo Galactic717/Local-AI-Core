@@ -187,3 +187,9 @@ python/
 *.pth
 *.ckpt
 *.weights
+
+# Build archives - ship these as release assets, not in the repo
+*.zip
+*.7z
+*.msi
+*.exe
